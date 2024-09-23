@@ -20,6 +20,8 @@ RSI_OVERBOUGHT_LINE_COLOR: str = "red"
 MACD_LINE_COLOR: str = "blue"
 MACD_SIGNAL_LINE_COLOR: str = "orange"
 MACD_HISTOGRAM_LINE_COLOR: str = "dimgray"
+ASCENT_CROSS_COLOR: str = "green"
+DESCENT_CROSS_COLOR: str = "red"
 
 SMA200_LINE_WIDTH: float = 2
 EMA4_LINE_WIDTH: float = 0.5
@@ -30,6 +32,7 @@ RSI_OVERSOLD_LINE_WIDTH: float = 0.5
 RSI_OVERBOUGHT_LINE_WIDTH: float = 0.5
 MACD_LINE_WIDTH: float = 0.5
 MACD_SIGNAL_LINE_WIDTH: float = 0.5
+TRIPLE_CROSS_MARKER_SIZE: int = 200
 
 RSI_PERIOD: int = 14
 MACD_FAST_PERIOD: int = 14
@@ -207,10 +210,17 @@ def main():
                 label=EMA40,
             ),
             mpf.make_addplot(
-                stock_data[ASCENT_CROSS][stock_data[ASCENT_CROSS] != pandas.NA], type="scatter", markersize=50, marker="^"
-            ),
+                data=stock_data[ASCENT_CROSS][stock_data[ASCENT_CROSS] != pandas.NA],
+                type="scatter",
+                markersize=TRIPLE_CROSS_MARKER_SIZE,
+                marker="^",
+                color=ASCENT_CROSS_COLOR),
             mpf.make_addplot(
-                stock_data[DESCENT_CROSS][stock_data[DESCENT_CROSS] != pandas.NA], type="scatter", markersize=50, marker="v"
+                data=stock_data[DESCENT_CROSS][stock_data[DESCENT_CROSS] != pandas.NA],
+                type="scatter",
+                markersize=TRIPLE_CROSS_MARKER_SIZE,
+                marker="v",
+                color=DESCENT_CROSS_COLOR,
             ),
             mpf.make_addplot(
                 data=stock_data[RSI],
