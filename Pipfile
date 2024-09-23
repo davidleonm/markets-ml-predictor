@@ -12,6 +12,7 @@ psutil = "*"
 pre-commit = "*"
 yfinance = "*"
 mplfinance = "*"
+mpld3 = "*"
 
 [dev-packages]
 black = "*"
