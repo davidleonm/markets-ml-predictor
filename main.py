@@ -121,8 +121,11 @@ def set_triple_cross(stock_data: DataFrame, threshold: float) -> None:
                        (abs(stock_data[EMA18] - stock_data[EMA40]) < threshold))
     stock_data[CROSS] = stock_data[EMA4].where(cross_condition)
 
-    # stock_data[ASCENT_CROSS] = (stock_data[CROSS]) & (stock_data[EMA4] > stock_data[EMA18]) & (stock_data[EMA18] > stock_data[EMA40])
-    # stock_data[DESCENT_CROSS] = (stock_data[CROSS]) & (stock_data[EMA4] < stock_data[EMA18]) & (stock_data[EMA18] < stock_data[EMA40])
+    ascent_cross_condition = (stock_data[EMA4] < stock_data[EMA40]) & (stock_data[EMA18] < stock_data[EMA40])
+    stock_data[ASCENT_CROSS] = stock_data[CROSS].where(ascent_cross_condition)
+
+    descent_cross_condition = (stock_data[EMA4] > stock_data[EMA40]) & (stock_data[EMA18] > stock_data[EMA40])
+    stock_data[DESCENT_CROSS] = stock_data[CROSS].where(descent_cross_condition)
 
 
 logger = get_logger(name=__name__)
@@ -204,11 +207,11 @@ def main():
                 label=EMA40,
             ),
             mpf.make_addplot(
-                stock_data[CROSS][stock_data[CROSS] != pandas.NA], type="scatter", markersize=50, marker="X"
+                stock_data[ASCENT_CROSS][stock_data[ASCENT_CROSS] != pandas.NA], type="scatter", markersize=50, marker="^"
             ),
-            # mpf.make_addplot(
-            #     stock_data[stock_data[DESCENT_CROSS]], type="scatter", markersize=200, marker="v"
-            # ),
+            mpf.make_addplot(
+                stock_data[DESCENT_CROSS][stock_data[DESCENT_CROSS] != pandas.NA], type="scatter", markersize=50, marker="v"
+            ),
             mpf.make_addplot(
                 data=stock_data[RSI],
                 panel=1,
