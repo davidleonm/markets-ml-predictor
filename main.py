@@ -36,7 +36,7 @@ MACD_FAST_PERIOD: int = 14
 MACD_SLOW_PERIOD: int = 28
 MACD_SIGNAL_PERIOD: int = 9
 
-TRIPLE_CROSS_THRESHOLD: float = 100
+TRIPLE_CROSS_THRESHOLD: float = 20
 
 # Columns
 CLOSE: str = "Close"
@@ -116,9 +116,9 @@ def set_macd(
 
 
 def set_triple_cross(stock_data: DataFrame, threshold: float) -> None:
-    cross_condition = (abs(stock_data[EMA4] - stock_data[EMA18]) < threshold) & (
-            abs(stock_data[EMA18] - stock_data[EMA40]) < threshold
-    )
+    cross_condition = ((abs(stock_data[EMA4] - stock_data[EMA18]) < threshold) &
+                       (abs(stock_data[EMA4] - stock_data[EMA40]) < threshold) &
+                       (abs(stock_data[EMA18] - stock_data[EMA40]) < threshold))
     stock_data[CROSS] = stock_data[EMA4].where(cross_condition)
 
     # stock_data[ASCENT_CROSS] = (stock_data[CROSS]) & (stock_data[EMA4] > stock_data[EMA18]) & (stock_data[EMA18] > stock_data[EMA40])
@@ -204,7 +204,7 @@ def main():
                 label=EMA40,
             ),
             mpf.make_addplot(
-                stock_data[CROSS][stock_data[CROSS] != pandas.NA], type="scatter", markersize=200, marker="^"
+                stock_data[CROSS][stock_data[CROSS] != pandas.NA], type="scatter", markersize=50, marker="X"
             ),
             # mpf.make_addplot(
             #     stock_data[stock_data[DESCENT_CROSS]], type="scatter", markersize=200, marker="v"
