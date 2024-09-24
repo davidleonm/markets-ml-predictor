@@ -131,6 +131,25 @@ def set_triple_cross(stock_data: DataFrame, threshold: float) -> None:
     stock_data[DESCENT_CROSS] = stock_data[CROSS].where(descent_cross_condition)
 
 
+def set_moving_averages(stock_data: DataFrame) -> None:
+    stock_data[SMA200] = stock_data[CLOSE].rolling(window=200).mean()
+    stock_data[EMA4] = stock_data[CLOSE].ewm(span=4, adjust=False).mean()
+    stock_data[EMA18] = stock_data[CLOSE].ewm(span=18, adjust=False).mean()
+    stock_data[EMA40] = stock_data[CLOSE].ewm(span=40, adjust=False).mean()
+
+
+def enrich_data(stock_data: DataFrame) -> None:
+    set_moving_averages(stock_data=stock_data)
+    set_rsi(stock_data=stock_data, period=RSI_PERIOD)
+    set_macd(
+        stock_data=stock_data,
+        fast_period=MACD_FAST_PERIOD,
+        slow_period=MACD_SLOW_PERIOD,
+        signal_period=MACD_SIGNAL_PERIOD,
+    )
+    set_triple_cross(stock_data=stock_data, threshold=TRIPLE_CROSS_THRESHOLD)
+
+
 logger = get_logger(name=__name__)
 
 
@@ -161,18 +180,7 @@ def main():
         # Enrich data with moving averages and indicators
         logger.info(msg="Enriching data...")
         start_time = datetime.now()
-        stock_data[SMA200] = stock_data[CLOSE].rolling(window=200).mean()
-        stock_data[EMA4] = stock_data[CLOSE].ewm(span=4, adjust=False).mean()
-        stock_data[EMA18] = stock_data[CLOSE].ewm(span=18, adjust=False).mean()
-        stock_data[EMA40] = stock_data[CLOSE].ewm(span=40, adjust=False).mean()
-        set_rsi(stock_data=stock_data, period=RSI_PERIOD)
-        set_macd(
-            stock_data=stock_data,
-            fast_period=MACD_FAST_PERIOD,
-            slow_period=MACD_SLOW_PERIOD,
-            signal_period=MACD_SIGNAL_PERIOD,
-        )
-        set_triple_cross(stock_data=stock_data, threshold=TRIPLE_CROSS_THRESHOLD)
+        enrich_data(stock_data=stock_data)
         logger.debug(
             msg=f"Data enriched in {get_timestamp_seconds(start_time=start_time)} seconds"
         )
