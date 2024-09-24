@@ -5,6 +5,7 @@ from datetime import datetime
 
 import colorlog
 import mplfinance as mpf
+import numpy
 import pandas
 import yfinance as yf
 from pandas import DataFrame
@@ -88,7 +89,7 @@ def get_logger(name: str) -> logging.Logger:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ML stock market price predictor")
     parser.add_argument(
-        "--ticker", help="Ticker or stock symbol", type=str, required=True
+        "--ticker", help="Ticker or stock symbol taken from https://finance.yahoo.com", type=str, required=True
     )
 
     return parser.parse_args()
@@ -118,9 +119,9 @@ def set_macd(
 
 
 def set_triple_cross(stock_data: DataFrame, threshold: float) -> None:
-    cross_condition = ((abs(stock_data[EMA4] - stock_data[EMA18]) < threshold) &
-                       (abs(stock_data[EMA4] - stock_data[EMA40]) < threshold) &
-                       (abs(stock_data[EMA18] - stock_data[EMA40]) < threshold))
+    cross_condition = ((numpy.abs(stock_data[EMA4] - stock_data[EMA18]) < threshold) &
+                       (numpy.abs(stock_data[EMA4] - stock_data[EMA40]) < threshold) &
+                       (numpy.abs(stock_data[EMA18] - stock_data[EMA40]) < threshold))
     stock_data[CROSS] = stock_data[EMA4].where(cross_condition)
 
     ascent_cross_condition = (stock_data[EMA4] < stock_data[EMA40]) & (stock_data[EMA18] < stock_data[EMA40])
