@@ -9,6 +9,11 @@ import numpy
 import pandas
 import yfinance as yf
 from pandas import DataFrame
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from xgboost import XGBRegressor
 
 # Charts configuration
 SMA200_LINE_COLOR: str = "blue"
@@ -41,8 +46,9 @@ MACD_SIGNAL_PERIOD: int = 9
 
 TRIPLE_CROSS_THRESHOLD: float = 20
 
-# Columns
+# Base columns
 CLOSE: str = "Close"
+VOLUME: str = "Volume"
 
 # Moving average columns
 SMA200: str = "SMA200"
@@ -58,6 +64,14 @@ MACD_HISTOGRAM: str = "MACD_HISTOGRAM"
 CROSS: str = "CROSS"
 ASCENT_CROSS: str = "ASCENT_CROSS"
 DESCENT_CROSS: str = "DESCENT_CROSS"
+
+# Columns for predictions
+FEATURES: list[str] = [CLOSE, VOLUME, SMA200, EMA4, EMA18, EMA40, RSI, MACD, MACD_SIGNAL, MACD_HISTOGRAM]
+CLOSE_PREDICTED_RF: str = "ClosePredictedRF"
+CLOSE_PREDICTED_XGB: str = "ClosePredictedXGB"
+
+# Constants
+NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
 
 
 # Helper methods
@@ -163,7 +177,7 @@ def main():
     ylogger.propagate = False
 
     try:
-        # Getting data from yahoo finance
+        ## Getting data from yahoo finance
         logger.info(msg=f"Downloading data for {args.ticker.upper()}...")
         start_time = datetime.now()
         stock_data: DataFrame = yf.download(
@@ -177,7 +191,7 @@ def main():
             msg=f"Data downloaded in {get_timestamp_seconds(start_time=start_time)} seconds"
         )
 
-        # Enrich data with moving averages and indicators
+        ## Enrich data with moving averages and indicators
         logger.info(msg="Enriching data...")
         start_time = datetime.now()
         enrich_data(stock_data=stock_data)
@@ -185,8 +199,47 @@ def main():
             msg=f"Data enriched in {get_timestamp_seconds(start_time=start_time)} seconds"
         )
 
-        # Print data info
+        ## Print data info
         stock_data.info()
+
+        ## Simulate prediction for the last year
+        logger.info(msg="Simulating prediction for the last year...")
+        start_time = datetime.now()
+
+        # Create dataframe skipping the last year to let the ML model predict it
+        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(
+            subset=[SMA200, RSI])  # The first rows don't have the moving averages
+        features: DataFrame = stock_data_until_minus_days[FEATURES].iloc[:-1]
+        target: DataFrame = stock_data_until_minus_days[CLOSE].shift(-1).dropna()
+
+        # Scaler as ML languages work better using lower values
+        scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
+        scaled_features = scaler.fit_transform(X=features)
+        scaled_target = scaler.fit_transform(X=target.values.reshape(-1, 1))
+
+        # Split data into training and testing
+        x_train, x_test, y_train, y_test = train_test_split(scaled_features, scaled_target, train_size=0.8, shuffle=False)
+
+        # Train the models
+        random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
+        xgb_regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+        random_forest.fit(x_train, y_train.ravel())
+        xgb_regressor.fit(x_train, y_train.ravel())
+
+        # Predict the values and reverse the scaling
+        rf_predictions = scaler.inverse_transform(xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        xgb_predictions = scaler.inverse_transform(xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        y_test_descaled = scaler.inverse_transform(y_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
+
+        # Calculate the metrics and evaluate the models
+        logger.debug(f"Random Forest MAE: {mean_absolute_error(y_test_descaled, rf_predictions)}, R²: {r2_score(y_test_descaled, rf_predictions)}")
+        logger.debug(f"XGBoost MAE: {mean_absolute_error(y_test_descaled, xgb_predictions)}, R²: {r2_score(y_test_descaled, xgb_predictions)}")
+        logger.debug(msg=f"Predicting done in {get_timestamp_seconds(start_time=start_time)} seconds")
+
+        # Assigning the predicted data to the original one to compare it
+        stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
+        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF] = rf_predictions
+        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_XGB] = xgb_predictions
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
@@ -230,6 +283,18 @@ def main():
                 marker="v",
                 color=TRIPLE_CROSS_MARKER_COLOR,
             ),
+            mpf.make_addplot(
+                data=stock_data[CLOSE_PREDICTED_RF],
+                color='magenta',
+                width=3,
+                label=CLOSE_PREDICTED_RF,
+            ),
+            # mpf.make_addplot(
+            #     data=stock_data[CLOSE_PREDICTED_XGB],
+            #     color='magenta',
+            #     width=1,
+            #     label=CLOSE_PREDICTED_XGB,
+            # ),
             mpf.make_addplot(
                 data=stock_data[RSI],
                 panel=1,
