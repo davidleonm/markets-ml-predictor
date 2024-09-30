@@ -223,17 +223,19 @@ def main():
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
         xgb_regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
-        random_forest.fit(x_train, y_train.ravel())
-        xgb_regressor.fit(x_train, y_train.ravel())
+        random_forest.fit(X=x_train, y=y_train.ravel())
+        xgb_regressor.fit(X=x_train, y=y_train.ravel())
 
         # Predict the values and reverse the scaling
-        rf_predictions = scaler.inverse_transform(xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        xgb_predictions = scaler.inverse_transform(xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        y_test_descaled = scaler.inverse_transform(y_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
+        rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        y_test_descaled = scaler.inverse_transform(X=y_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
 
         # Calculate the metrics and evaluate the models
-        logger.debug(f"Random Forest MAE: {mean_absolute_error(y_test_descaled, rf_predictions)}, R²: {r2_score(y_test_descaled, rf_predictions)}")
-        logger.debug(f"XGBoost MAE: {mean_absolute_error(y_test_descaled, xgb_predictions)}, R²: {r2_score(y_test_descaled, xgb_predictions)}")
+        logger.debug(f"Random Forest MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=rf_predictions)}, "
+                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=rf_predictions)}")
+        logger.debug(f"XGBoost MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=xgb_predictions)}, "
+                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=xgb_predictions)}")
         logger.debug(msg=f"Predicting done in {get_timestamp_seconds(start_time=start_time)} seconds")
 
         # Assigning the predicted data to the original one to compare it
@@ -285,16 +287,16 @@ def main():
             ),
             mpf.make_addplot(
                 data=stock_data[CLOSE_PREDICTED_RF],
-                color='magenta',
-                width=3,
+                color='green',
+                width=1,
                 label=CLOSE_PREDICTED_RF,
             ),
-            # mpf.make_addplot(
-            #     data=stock_data[CLOSE_PREDICTED_XGB],
-            #     color='magenta',
-            #     width=1,
-            #     label=CLOSE_PREDICTED_XGB,
-            # ),
+            mpf.make_addplot(
+                data=stock_data[CLOSE_PREDICTED_XGB],
+                color='magenta',
+                width=1,
+                label=CLOSE_PREDICTED_XGB,
+            ),
             mpf.make_addplot(
                 data=stock_data[RSI],
                 panel=1,
