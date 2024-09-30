@@ -207,10 +207,9 @@ def main():
         start_time = datetime.now()
 
         # Create dataframe skipping the last year to let the ML model predict it
-        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(
-            subset=[SMA200, RSI])  # The first rows don't have the moving averages
-        features: DataFrame = stock_data_until_minus_days[FEATURES].iloc[:-1]
-        target: DataFrame = stock_data_until_minus_days[CLOSE].shift(-1).dropna()
+        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE]
+        features: DataFrame = stock_data_until_minus_days[FEATURES]
+        target: DataFrame = stock_data_until_minus_days[CLOSE]
 
         # Scaler as ML languages work better using lower values
         scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
