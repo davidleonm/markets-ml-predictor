@@ -8,6 +8,9 @@ import mplfinance as mpf
 import numpy
 import pandas
 import yfinance as yf
+from keras import Sequential
+from keras.src.layers import LSTM, Dense
+from numpy import ndarray
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score, mean_absolute_error
@@ -109,6 +112,16 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def create_lstm_sequence(dataset: ndarray, time_step: int) -> tuple:
+    sequences, labels = [], []
+
+    for i in range(len(dataset) - time_step):
+        sequences.append(dataset[i:i + time_step])
+        labels.append(dataset[i + time_step])
+
+    return numpy.array(sequences), numpy.array(labels)
+
+
 # Methods to add indicators and moving averages
 def set_rsi(stock_data: DataFrame, period: int) -> None:
     delta = stock_data[CLOSE].diff()
@@ -180,9 +193,7 @@ def main():
         ## Getting data from yahoo finance
         logger.info(msg=f"Downloading data for {args.ticker.upper()}...")
         start_time = datetime.now()
-        stock_data: DataFrame = yf.download(
-            tickers=args.ticker.upper(), period="max", interval="1d", progress=False
-        )
+        stock_data: DataFrame = yf.download(tickers=args.ticker.upper(), period="max", interval="1d", progress=False)
         stock_data.drop_duplicates(inplace=True)
         stock_data.dropna(inplace=True)
         if stock_data.empty:
@@ -218,29 +229,47 @@ def main():
 
         # Split data into training and testing
         x_train, x_test, y_train, y_test = train_test_split(scaled_features, scaled_target, train_size=0.8, shuffle=False)
+        training_size = int(len(scaled_features) * 0.8)
+        train_data = scaled_features[:training_size]
+        test_data = scaled_features[training_size:]
+        train_seq, train_label = create_lstm_sequence(dataset=train_data, time_step=60)
+        test_seq, test_label = create_lstm_sequence(dataset=test_data, time_step=60)
 
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
         xgb_regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+        lstm_model = Sequential()
+        lstm_model.add(LSTM(units=60, return_sequences=True, input_shape=(train_seq.shape[1], train_seq.shape[2])))
+        lstm_model.add(LSTM(units=60, return_sequences=False))
+        lstm_model.add(Dense(10))
+        lstm_model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mean_absolute_error'])
+        lstm_model.summary()
+
         random_forest.fit(X=x_train, y=y_train.ravel())
         xgb_regressor.fit(X=x_train, y=y_train.ravel())
+        lstm_model.fit(train_seq, train_label, epochs=80, validation_data=(test_seq, test_label), verbose=1)
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
         xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
         y_test_descaled = scaler.inverse_transform(X=y_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
 
+        test_predict = scaler.inverse_transform(X=lstm_model.predict(test_seq))
+
         # Calculate the metrics and evaluate the models
         logger.debug(f"Random Forest MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=rf_predictions)}, "
                      f"R²: {r2_score(y_true=y_test_descaled, y_pred=rf_predictions)}")
         logger.debug(f"XGBoost MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=xgb_predictions)}, "
                      f"R²: {r2_score(y_true=y_test_descaled, y_pred=xgb_predictions)}")
+        logger.debug(f"LSTM MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=test_predict)}, "
+                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=test_predict)}")
         logger.debug(msg=f"Predicting done in {get_timestamp_seconds(start_time=start_time)} seconds")
 
         # Assigning the predicted data to the original one to compare it
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF] = rf_predictions
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_XGB] = xgb_predictions
+        stock_data.loc[stock_data_last_year.index, 'ClosePredictedLSTM'] = test_predict[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
@@ -295,6 +324,12 @@ def main():
                 color='magenta',
                 width=1,
                 label=CLOSE_PREDICTED_XGB,
+            ),
+            mpf.make_addplot(
+                data=stock_data['ClosePredictedLSTM'],
+                color='cyan',
+                width=1,
+                label='ClosePredictedLSTM',
             ),
             mpf.make_addplot(
                 data=stock_data[RSI],
