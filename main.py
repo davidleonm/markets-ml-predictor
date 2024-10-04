@@ -8,7 +8,7 @@ import mplfinance as mpf
 import numpy
 import pandas
 import yfinance as yf
-from keras import Sequential
+from keras import Sequential, Input
 from keras.src.layers import LSTM, Dense
 from numpy import ndarray
 from pandas import DataFrame
@@ -239,7 +239,8 @@ def main():
         random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
         xgb_regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
         lstm_model = Sequential()
-        lstm_model.add(LSTM(units=60, return_sequences=True, input_shape=(train_seq.shape[1], train_seq.shape[2])))
+        lstm_model.add(Input(shape=(train_seq.shape[1], train_seq.shape[2])))
+        lstm_model.add(LSTM(units=60, return_sequences=True))
         lstm_model.add(LSTM(units=60, return_sequences=False))
         lstm_model.add(Dense(units=1))
         lstm_model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mean_absolute_error'])
@@ -247,7 +248,7 @@ def main():
 
         random_forest.fit(X=train_features, y=train_target.ravel())
         xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(train_seq, train_label, epochs=80, validation_data=(test_seq, test_label), verbose=1)
+        lstm_model.fit(train_seq, train_label, epochs=10, validation_data=(test_seq, test_label), verbose=1)
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
