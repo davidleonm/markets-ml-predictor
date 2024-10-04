@@ -218,7 +218,7 @@ def main():
         start_time = datetime.now()
 
         # Create dataframe skipping the last year to let the ML model predict it
-        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE]
+        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(subset=[SMA200, RSI])
         features: DataFrame = stock_data_until_minus_days[FEATURES]
         target: DataFrame = stock_data_until_minus_days[CLOSE]
 
@@ -228,7 +228,7 @@ def main():
         scaled_target = scaler.fit_transform(X=target.values.reshape(-1, 1))
 
         # Split data into training and testing
-        x_train, x_test, y_train, y_test = train_test_split(scaled_features, scaled_target, train_size=0.8, shuffle=False)
+        train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target, train_size=0.8, shuffle=False)
         training_size = int(len(scaled_features) * 0.8)
         train_data = scaled_features[:training_size]
         test_data = scaled_features[training_size:]
@@ -241,35 +241,35 @@ def main():
         lstm_model = Sequential()
         lstm_model.add(LSTM(units=60, return_sequences=True, input_shape=(train_seq.shape[1], train_seq.shape[2])))
         lstm_model.add(LSTM(units=60, return_sequences=False))
-        lstm_model.add(Dense(10))
+        lstm_model.add(Dense(units=1))
         lstm_model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mean_absolute_error'])
         lstm_model.summary()
 
-        random_forest.fit(X=x_train, y=y_train.ravel())
-        xgb_regressor.fit(X=x_train, y=y_train.ravel())
+        random_forest.fit(X=train_features, y=train_target.ravel())
+        xgb_regressor.fit(X=train_features, y=train_target.ravel())
         lstm_model.fit(train_seq, train_label, epochs=80, validation_data=(test_seq, test_label), verbose=1)
 
         # Predict the values and reverse the scaling
-        rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(x_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        y_test_descaled = scaler.inverse_transform(X=y_test[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
+        rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
+        y_test_descaled = scaler.inverse_transform(X=test_targets[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
 
-        test_predict = scaler.inverse_transform(X=lstm_model.predict(test_seq))
+        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_seq).reshape(-1, 1))
 
         # Calculate the metrics and evaluate the models
         logger.debug(f"Random Forest MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=rf_predictions)}, "
                      f"R²: {r2_score(y_true=y_test_descaled, y_pred=rf_predictions)}")
         logger.debug(f"XGBoost MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=xgb_predictions)}, "
                      f"R²: {r2_score(y_true=y_test_descaled, y_pred=xgb_predictions)}")
-        logger.debug(f"LSTM MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=test_predict)}, "
-                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=test_predict)}")
+        # logger.debug(f"LSTM MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=lstm_predictions)}, "
+        #              f"R²: {r2_score(y_true=y_test_descaled, y_pred=lstm_predictions)}")
         logger.debug(msg=f"Predicting done in {get_timestamp_seconds(start_time=start_time)} seconds")
 
         # Assigning the predicted data to the original one to compare it
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF] = rf_predictions
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_XGB] = xgb_predictions
-        stock_data.loc[stock_data_last_year.index, 'ClosePredictedLSTM'] = test_predict[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
+        stock_data.loc[stock_data_last_year.index, 'ClosePredictedLSTM'] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
