@@ -13,7 +13,6 @@ from keras.src.layers import LSTM, Dense
 from numpy import ndarray
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score, mean_absolute_error
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBRegressor
@@ -270,18 +269,7 @@ def main():
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
         xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        y_test_descaled = scaler.inverse_transform(X=test_targets[-NUMBER_OF_PREDICTIONS_TO_COMPARE:])
-
         lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_seq).reshape(-1, 1))
-
-        # Calculate the metrics and evaluate the models
-        logger.debug(f"Random Forest MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=rf_predictions)}, "
-                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=rf_predictions)}")
-        logger.debug(f"XGBoost MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=xgb_predictions)}, "
-                     f"R²: {r2_score(y_true=y_test_descaled, y_pred=xgb_predictions)}")
-        # logger.debug(f"LSTM MAE: {mean_absolute_error(y_true=y_test_descaled, y_pred=lstm_predictions)}, "
-        #              f"R²: {r2_score(y_true=y_test_descaled, y_pred=lstm_predictions)}")
-        logger.debug(msg=f"Predicting done in {get_timestamp_seconds(start_time=start_time)} seconds")
 
         # Assigning the predicted data to the original one to compare it
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
