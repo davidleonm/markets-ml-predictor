@@ -86,6 +86,9 @@ NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
 N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
+TRAIN_SIZE: float = 0.8
+LSTM_TIME_UNITS: int = 60
+EPOCHS: int = 10
 
 
 # Helper methods
@@ -239,27 +242,29 @@ def main():
         scaled_target = scaler.fit_transform(X=target.values.reshape(-1, 1))
 
         # Split data into training and testing
-        train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target, train_size=0.8, shuffle=False)
-        training_size = int(len(scaled_features) * 0.8)
+        train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
+                                                                                     train_size=TRAIN_SIZE,
+                                                                                     shuffle=False)
+        training_size = int(len(scaled_features) * TRAIN_SIZE)
         train_data = scaled_features[:training_size]
         test_data = scaled_features[training_size:]
-        train_seq, train_label = create_lstm_sequence(dataset=train_data, time_step=60)
-        test_seq, test_label = create_lstm_sequence(dataset=test_data, time_step=60)
+        train_seq, train_label = create_lstm_sequence(dataset=train_data, time_step=LSTM_TIME_UNITS)
+        test_seq, test_label = create_lstm_sequence(dataset=test_data, time_step=LSTM_TIME_UNITS)
 
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
         xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
         lstm_model = Sequential()
         lstm_model.add(Input(shape=(train_seq.shape[1], train_seq.shape[2])))
-        lstm_model.add(LSTM(units=60, return_sequences=True))
-        lstm_model.add(LSTM(units=60, return_sequences=False))
+        lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
+        lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
         lstm_model.add(Dense(units=1))
         lstm_model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mean_absolute_error'])
         lstm_model.summary()
 
         random_forest.fit(X=train_features, y=train_target.ravel())
         xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(train_seq, train_label, epochs=10, validation_data=(test_seq, test_label), verbose=1)
+        lstm_model.fit(train_seq, train_label, epochs=EPOCHS, validation_data=(test_seq, test_label), verbose=1)
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
