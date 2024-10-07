@@ -1,7 +1,6 @@
 import argparse
 import logging
 import sys
-from datetime import datetime
 
 import colorlog
 import mplfinance as mpf
@@ -92,10 +91,6 @@ EPOCHS: int = 10
 
 
 # Helper methods
-def get_timestamp_seconds(start_time: datetime) -> float:
-    return round(number=(datetime.now() - start_time).total_seconds(), ndigits=2)
-
-
 def get_logger(name: str) -> logging.Logger:
     custom_logger = logging.getLogger(name)
     handler = logging.StreamHandler()
@@ -206,31 +201,22 @@ def main():
     try:
         ## Getting data from yahoo finance
         logger.info(msg=f"Downloading data for {args.ticker.upper()}...")
-        start_time = datetime.now()
         stock_data: DataFrame = yf.download(tickers=args.ticker.upper(), period="max", interval="1d", progress=False)
         stock_data.drop_duplicates(inplace=True)
         stock_data.dropna(inplace=True)
         if stock_data.empty:
             raise ValueError(f"No data found for {args.ticker.upper()}")
-        logger.debug(
-            msg=f"Data downloaded in {get_timestamp_seconds(start_time=start_time)} seconds"
-        )
 
         ## Enrich data with moving averages and indicators
         logger.info(msg="Enriching data...")
-        start_time = datetime.now()
         enrich_data(stock_data=stock_data)
         stock_data.dropna(subset=[COLUMN_EMA200, COLUMN_RSI], inplace=True)
-        logger.debug(
-            msg=f"Data enriched in {get_timestamp_seconds(start_time=start_time)} seconds"
-        )
 
         ## Print data info
         stock_data.info()
 
         ## Simulate prediction for the last year
         logger.info(msg="Simulating prediction for the last year...")
-        start_time = datetime.now()
 
         # Create dataframe skipping the last year to let the ML model predict it
         stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE]
