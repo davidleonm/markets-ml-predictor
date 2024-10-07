@@ -19,7 +19,7 @@ from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBRegressor
 
 # Charts configuration
-SMA200_LINE_COLOR: str = "blue"
+EMA200_LINE_COLOR: str = "blue"
 EMA4_LINE_COLOR: str = "black"
 EMA18_LINE_COLOR: str = "black"
 EMA40_LINE_COLOR: str = "orange"
@@ -30,8 +30,11 @@ MACD_LINE_COLOR: str = "blue"
 MACD_SIGNAL_LINE_COLOR: str = "orange"
 MACD_HISTOGRAM_LINE_COLOR: str = "dimgray"
 TRIPLE_CROSS_MARKER_COLOR: str = "blue"
+CLOSE_RF_COLOR: str = "green"
+CLOSE_XGB_COLOR: str = "magenta"
+CLOSE_LSTM_COLOR: str = "cyan"
 
-SMA200_LINE_WIDTH: float = 2
+EMA200_LINE_WIDTH: float = 2
 EMA4_LINE_WIDTH: float = 0.5
 EMA18_LINE_WIDTH: float = 0.5
 EMA40_LINE_WIDTH: float = 1
@@ -41,6 +44,9 @@ RSI_OVERBOUGHT_LINE_WIDTH: float = 0.5
 MACD_LINE_WIDTH: float = 0.5
 MACD_SIGNAL_LINE_WIDTH: float = 0.5
 TRIPLE_CROSS_MARKER_SIZE: int = 100
+CLOSE_RF_LINE_WIDTH: float = 1
+CLOSE_XGB_LINE_WIDTH: float = 1
+CLOSE_LSTM_LINE_WIDTH: float = 1
 
 RSI_PERIOD: int = 14
 MACD_FAST_PERIOD: int = 14
@@ -50,28 +56,30 @@ MACD_SIGNAL_PERIOD: int = 9
 TRIPLE_CROSS_THRESHOLD: float = 20
 
 # Base columns
-CLOSE: str = "Close"
-VOLUME: str = "Volume"
+COLUMN_CLOSE: str = "Close"
+COLUMN_VOLUME: str = "Volume"
 
 # Moving average columns
-SMA200: str = "SMA200"
-EMA4: str = "EMA4"
-EMA18: str = "EMA18"
-EMA40: str = "EMA40"
+COLUMN_EMA200: str = "EMA200"
+COLUMN_EMA4: str = "EMA4"
+COLUMN_EMA18: str = "EMA18"
+COLUMN_EMA40: str = "EMA40"
 
 # Indicator columns
-RSI: str = "RSI"
-MACD: str = "MACD"
-MACD_SIGNAL: str = "MACD_SIGNAL"
-MACD_HISTOGRAM: str = "MACD_HISTOGRAM"
-CROSS: str = "CROSS"
-ASCENT_CROSS: str = "ASCENT_CROSS"
-DESCENT_CROSS: str = "DESCENT_CROSS"
+COLUMN_RSI: str = "RSI"
+COLUMN_MACD: str = "MACD"
+COLUMN_MACD_SIGNAL: str = "MACD_SIGNAL"
+COLUMN_MACD_HISTOGRAM: str = "MACD_HISTOGRAM"
+COLUMN_CROSS: str = "CROSS"
+COLUMN_ASCENT_CROSS: str = "ASCENT_CROSS"
+COLUMN_DESCENT_CROSS: str = "DESCENT_CROSS"
 
 # Columns for predictions
-FEATURES: list[str] = [CLOSE, VOLUME, SMA200, EMA4, EMA18, EMA40, RSI, MACD, MACD_SIGNAL, MACD_HISTOGRAM]
+COLUMNS_FEATURES: list[str] = [COLUMN_CLOSE, COLUMN_VOLUME, COLUMN_EMA200, COLUMN_EMA4, COLUMN_EMA18, COLUMN_EMA40, COLUMN_RSI, COLUMN_MACD,
+                               COLUMN_MACD_SIGNAL, COLUMN_MACD_HISTOGRAM]
 CLOSE_PREDICTED_RF: str = "ClosePredictedRF"
 CLOSE_PREDICTED_XGB: str = "ClosePredictedXGB"
+CLOSE_PREDICTED_LSTM: str = "ClosePredictedLSTM"
 
 # Constants
 NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
@@ -124,45 +132,45 @@ def create_lstm_sequence(dataset: ndarray, time_step: int) -> tuple:
 
 # Methods to add indicators and moving averages
 def set_rsi(stock_data: DataFrame, period: int) -> None:
-    delta = stock_data[CLOSE].diff()
+    delta = stock_data[COLUMN_CLOSE].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
 
     rs = gain / loss
-    stock_data[RSI] = 100 - (100 / (1 + rs))
+    stock_data[COLUMN_RSI] = 100 - (100 / (1 + rs))
 
 
 def set_macd(
         stock_data: DataFrame, fast_period: int, slow_period: int, signal_period: int
 ) -> None:
-    short_ema = stock_data[CLOSE].ewm(span=fast_period, adjust=False).mean()
-    long_ema = stock_data[CLOSE].ewm(span=slow_period, adjust=False).mean()
+    short_ema = stock_data[COLUMN_CLOSE].ewm(span=fast_period, adjust=False).mean()
+    long_ema = stock_data[COLUMN_CLOSE].ewm(span=slow_period, adjust=False).mean()
 
-    stock_data[MACD] = short_ema - long_ema
-    stock_data[MACD_SIGNAL] = (
-        stock_data[MACD].ewm(span=signal_period, adjust=False).mean()
+    stock_data[COLUMN_MACD] = short_ema - long_ema
+    stock_data[COLUMN_MACD_SIGNAL] = (
+        stock_data[COLUMN_MACD].ewm(span=signal_period, adjust=False).mean()
     )
-    stock_data[MACD_HISTOGRAM] = stock_data[MACD] - stock_data[MACD_SIGNAL]
+    stock_data[COLUMN_MACD_HISTOGRAM] = stock_data[COLUMN_MACD] - stock_data[COLUMN_MACD_SIGNAL]
 
 
 def set_triple_cross(stock_data: DataFrame, threshold: float) -> None:
-    cross_condition = ((numpy.abs(stock_data[EMA4] - stock_data[EMA18]) < threshold) &
-                       (numpy.abs(stock_data[EMA4] - stock_data[EMA40]) < threshold) &
-                       (numpy.abs(stock_data[EMA18] - stock_data[EMA40]) < threshold))
-    stock_data[CROSS] = stock_data[EMA4].where(cross_condition)
+    cross_condition = ((numpy.abs(stock_data[COLUMN_EMA4] - stock_data[COLUMN_EMA18]) < threshold) &
+                       (numpy.abs(stock_data[COLUMN_EMA4] - stock_data[COLUMN_EMA40]) < threshold) &
+                       (numpy.abs(stock_data[COLUMN_EMA18] - stock_data[COLUMN_EMA40]) < threshold))
+    stock_data[COLUMN_CROSS] = stock_data[COLUMN_EMA4].where(cross_condition)
 
-    ascent_cross_condition = (stock_data[EMA4] < stock_data[EMA40]) & (stock_data[EMA18] < stock_data[EMA40])
-    stock_data[ASCENT_CROSS] = stock_data[CROSS].where(ascent_cross_condition)
+    ascent_cross_condition = (stock_data[COLUMN_EMA4] < stock_data[COLUMN_EMA40]) & (stock_data[COLUMN_EMA18] < stock_data[COLUMN_EMA40])
+    stock_data[COLUMN_ASCENT_CROSS] = stock_data[COLUMN_CROSS].where(ascent_cross_condition)
 
-    descent_cross_condition = (stock_data[EMA4] > stock_data[EMA40]) & (stock_data[EMA18] > stock_data[EMA40])
-    stock_data[DESCENT_CROSS] = stock_data[CROSS].where(descent_cross_condition)
+    descent_cross_condition = (stock_data[COLUMN_EMA4] > stock_data[COLUMN_EMA40]) & (stock_data[COLUMN_EMA18] > stock_data[COLUMN_EMA40])
+    stock_data[COLUMN_DESCENT_CROSS] = stock_data[COLUMN_CROSS].where(descent_cross_condition)
 
 
 def set_moving_averages(stock_data: DataFrame) -> None:
-    stock_data[SMA200] = stock_data[CLOSE].rolling(window=200).mean()
-    stock_data[EMA4] = stock_data[CLOSE].ewm(span=4, adjust=False).mean()
-    stock_data[EMA18] = stock_data[CLOSE].ewm(span=18, adjust=False).mean()
-    stock_data[EMA40] = stock_data[CLOSE].ewm(span=40, adjust=False).mean()
+    stock_data[COLUMN_EMA4] = stock_data[COLUMN_CLOSE].ewm(span=4, adjust=False).mean()
+    stock_data[COLUMN_EMA18] = stock_data[COLUMN_CLOSE].ewm(span=18, adjust=False).mean()
+    stock_data[COLUMN_EMA40] = stock_data[COLUMN_CLOSE].ewm(span=40, adjust=False).mean()
+    stock_data[COLUMN_EMA200] = stock_data[COLUMN_CLOSE].ewm(span=200, adjust=False).mean()
 
 
 def enrich_data(stock_data: DataFrame) -> None:
@@ -218,9 +226,9 @@ def main():
         start_time = datetime.now()
 
         # Create dataframe skipping the last year to let the ML model predict it
-        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(subset=[SMA200, RSI])
-        features: DataFrame = stock_data_until_minus_days[FEATURES]
-        target: DataFrame = stock_data_until_minus_days[CLOSE]
+        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(subset=[COLUMN_EMA200, COLUMN_RSI])
+        features: DataFrame = stock_data_until_minus_days[COLUMNS_FEATURES]
+        target: DataFrame = stock_data_until_minus_days[COLUMN_CLOSE]
 
         # Scaler as ML languages work better using lower values
         scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
@@ -270,45 +278,45 @@ def main():
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF] = rf_predictions
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_XGB] = xgb_predictions
-        stock_data.loc[stock_data_last_year.index, 'ClosePredictedLSTM'] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
+        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
         more_plots = [
             mpf.make_addplot(
-                data=stock_data[SMA200],
-                color=SMA200_LINE_COLOR,
-                width=SMA200_LINE_WIDTH,
-                label=SMA200,
+                data=stock_data[COLUMN_EMA200],
+                color=EMA200_LINE_COLOR,
+                width=EMA200_LINE_WIDTH,
+                label=COLUMN_EMA200,
             ),
             mpf.make_addplot(
-                data=stock_data[EMA4],
+                data=stock_data[COLUMN_EMA4],
                 color=EMA4_LINE_COLOR,
                 width=EMA4_LINE_WIDTH,
-                label=EMA4,
+                label=COLUMN_EMA4,
                 linestyle="dotted",
             ),
             mpf.make_addplot(
-                data=stock_data[EMA18],
+                data=stock_data[COLUMN_EMA18],
                 color=EMA18_LINE_COLOR,
                 width=EMA18_LINE_WIDTH,
-                label=EMA18,
+                label=COLUMN_EMA18,
                 linestyle="dotted",
             ),
             mpf.make_addplot(
-                data=stock_data[EMA40],
+                data=stock_data[COLUMN_EMA40],
                 color=EMA40_LINE_COLOR,
                 width=EMA40_LINE_WIDTH,
-                label=EMA40,
+                label=COLUMN_EMA40,
             ),
             mpf.make_addplot(
-                data=stock_data[ASCENT_CROSS][stock_data[ASCENT_CROSS] != pandas.NA],
+                data=stock_data[COLUMN_ASCENT_CROSS][stock_data[COLUMN_ASCENT_CROSS] != pandas.NA],
                 type="scatter",
                 markersize=TRIPLE_CROSS_MARKER_SIZE,
                 marker="^",
                 color=TRIPLE_CROSS_MARKER_COLOR),
             mpf.make_addplot(
-                data=stock_data[DESCENT_CROSS][stock_data[DESCENT_CROSS] != pandas.NA],
+                data=stock_data[COLUMN_DESCENT_CROSS][stock_data[COLUMN_DESCENT_CROSS] != pandas.NA],
                 type="scatter",
                 markersize=TRIPLE_CROSS_MARKER_SIZE,
                 marker="v",
@@ -316,28 +324,28 @@ def main():
             ),
             mpf.make_addplot(
                 data=stock_data[CLOSE_PREDICTED_RF],
-                color='green',
-                width=1,
+                color=CLOSE_RF_COLOR,
+                width=CLOSE_RF_LINE_WIDTH,
                 label=CLOSE_PREDICTED_RF,
             ),
             mpf.make_addplot(
                 data=stock_data[CLOSE_PREDICTED_XGB],
-                color='magenta',
-                width=1,
+                color=CLOSE_XGB_COLOR,
+                width=CLOSE_XGB_LINE_WIDTH,
                 label=CLOSE_PREDICTED_XGB,
             ),
             mpf.make_addplot(
-                data=stock_data['ClosePredictedLSTM'],
-                color='cyan',
-                width=1,
-                label='ClosePredictedLSTM',
+                data=stock_data[CLOSE_PREDICTED_LSTM],
+                color=CLOSE_LSTM_COLOR,
+                width=CLOSE_LSTM_LINE_WIDTH,
+                label=CLOSE_PREDICTED_LSTM,
             ),
             mpf.make_addplot(
-                data=stock_data[RSI],
+                data=stock_data[COLUMN_RSI],
                 panel=1,
                 color=RSI_LINE_COLOR,
                 width=RSI_LINE_WIDTH,
-                ylabel=RSI,
+                ylabel=COLUMN_RSI,
             ),
             mpf.make_addplot(
                 data=[70] * len(stock_data),
@@ -356,20 +364,20 @@ def main():
                 secondary_y=False,
             ),
             mpf.make_addplot(
-                data=stock_data[MACD],
+                data=stock_data[COLUMN_MACD],
                 panel=2,
                 color=MACD_LINE_COLOR,
-                ylabel=MACD,
+                ylabel=COLUMN_MACD,
                 width=MACD_LINE_WIDTH,
             ),
             mpf.make_addplot(
-                data=stock_data[MACD_SIGNAL],
+                data=stock_data[COLUMN_MACD_SIGNAL],
                 panel=2,
                 color=MACD_SIGNAL_LINE_COLOR,
                 width=MACD_SIGNAL_LINE_WIDTH,
             ),
             mpf.make_addplot(
-                data=stock_data[MACD_HISTOGRAM],
+                data=stock_data[COLUMN_MACD_HISTOGRAM],
                 panel=2,
                 type="bar",
                 color=MACD_HISTOGRAM_LINE_COLOR,
