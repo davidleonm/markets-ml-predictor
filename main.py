@@ -29,8 +29,7 @@ MACD_LINE_COLOR: str = "blue"
 MACD_SIGNAL_LINE_COLOR: str = "orange"
 MACD_HISTOGRAM_LINE_COLOR: str = "dimgray"
 TRIPLE_CROSS_MARKER_COLOR: str = "blue"
-CLOSE_RF_COLOR: str = "green"
-CLOSE_XGB_COLOR: str = "magenta"
+CLOSE_RF_XGB_COLOR: str = "magenta"
 CLOSE_LSTM_COLOR: str = "cyan"
 
 EMA200_LINE_WIDTH: float = 2
@@ -43,8 +42,7 @@ RSI_OVERBOUGHT_LINE_WIDTH: float = 0.5
 MACD_LINE_WIDTH: float = 0.5
 MACD_SIGNAL_LINE_WIDTH: float = 0.5
 TRIPLE_CROSS_MARKER_SIZE: int = 100
-CLOSE_RF_LINE_WIDTH: float = 1
-CLOSE_XGB_LINE_WIDTH: float = 1
+CLOSE_RF_XGB_LINE_WIDTH: float = 1
 CLOSE_LSTM_LINE_WIDTH: float = 1
 
 RSI_PERIOD: int = 14
@@ -55,6 +53,9 @@ MACD_SIGNAL_PERIOD: int = 9
 TRIPLE_CROSS_THRESHOLD: float = 20
 
 # Base columns
+COLUMN_OPEN: str = "Open"
+COLUMN_HIGH: str = "High"
+COLUMN_LOW: str = "Low"
 COLUMN_CLOSE: str = "Close"
 COLUMN_VOLUME: str = "Volume"
 
@@ -74,11 +75,11 @@ COLUMN_ASCENT_CROSS: str = "ASCENT_CROSS"
 COLUMN_DESCENT_CROSS: str = "DESCENT_CROSS"
 
 # Columns for predictions
-COLUMNS_FEATURES: list[str] = [COLUMN_CLOSE, COLUMN_VOLUME, COLUMN_EMA200, COLUMN_EMA4, COLUMN_EMA18, COLUMN_EMA40, COLUMN_RSI, COLUMN_MACD,
+COLUMNS_FEATURES: list[str] = [COLUMN_OPEN, COLUMN_HIGH, COLUMN_LOW, COLUMN_CLOSE, COLUMN_VOLUME, COLUMN_EMA200, COLUMN_EMA4, COLUMN_EMA18,
+                               COLUMN_EMA40, COLUMN_RSI, COLUMN_MACD,
                                COLUMN_MACD_SIGNAL, COLUMN_MACD_HISTOGRAM]
-CLOSE_PREDICTED_RF: str = "ClosePredictedRF"
-CLOSE_PREDICTED_XGB: str = "ClosePredictedXGB"
-CLOSE_PREDICTED_LSTM: str = "ClosePredictedLSTM"
+CLOSE_PREDICTED_RF_XGB: str = "ClosePredicted_RF_XGB"
+CLOSE_PREDICTED_LSTM: str = "ClosePredicted_LSTM"
 
 # Constants
 NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
@@ -273,8 +274,7 @@ def main():
 
         # Assigning the predicted data to the original one to compare it
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
-        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF] = rf_predictions
-        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_XGB] = xgb_predictions
+        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
         stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
         # Configuring plot charts
@@ -320,16 +320,10 @@ def main():
                 color=TRIPLE_CROSS_MARKER_COLOR,
             ),
             mpf.make_addplot(
-                data=stock_data[CLOSE_PREDICTED_RF],
-                color=CLOSE_RF_COLOR,
-                width=CLOSE_RF_LINE_WIDTH,
-                label=CLOSE_PREDICTED_RF,
-            ),
-            mpf.make_addplot(
-                data=stock_data[CLOSE_PREDICTED_XGB],
-                color=CLOSE_XGB_COLOR,
-                width=CLOSE_XGB_LINE_WIDTH,
-                label=CLOSE_PREDICTED_XGB,
+                data=stock_data[CLOSE_PREDICTED_RF_XGB],
+                color=CLOSE_RF_XGB_COLOR,
+                width=CLOSE_RF_XGB_LINE_WIDTH,
+                label=CLOSE_PREDICTED_RF_XGB,
             ),
             mpf.make_addplot(
                 data=stock_data[CLOSE_PREDICTED_LSTM],
