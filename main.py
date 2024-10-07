@@ -220,6 +220,7 @@ def main():
         logger.info(msg="Enriching data...")
         start_time = datetime.now()
         enrich_data(stock_data=stock_data)
+        stock_data.dropna(subset=[COLUMN_EMA200, COLUMN_RSI], inplace=True)
         logger.debug(
             msg=f"Data enriched in {get_timestamp_seconds(start_time=start_time)} seconds"
         )
@@ -232,7 +233,7 @@ def main():
         start_time = datetime.now()
 
         # Create dataframe skipping the last year to let the ML model predict it
-        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE].dropna(subset=[COLUMN_EMA200, COLUMN_RSI])
+        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE]
         features: DataFrame = stock_data_until_minus_days[COLUMNS_FEATURES]
         target: DataFrame = stock_data_until_minus_days[COLUMN_CLOSE]
 
@@ -259,12 +260,12 @@ def main():
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
         lstm_model.add(Dense(units=1))
-        lstm_model.compile(loss='mean_squared_error', optimizer='adam', metrics=['mean_absolute_error'])
+        lstm_model.compile(loss="mean_squared_error", optimizer="adam", metrics=["mean_absolute_error"])
         lstm_model.summary()
 
         random_forest.fit(X=train_features, y=train_target.ravel())
         xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(train_seq, train_label, epochs=EPOCHS, validation_data=(test_seq, test_label), verbose=1)
+        lstm_model.fit(x=train_seq, y=train_label, epochs=EPOCHS, validation_data=(test_seq, test_label))
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
