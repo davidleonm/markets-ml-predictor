@@ -83,6 +83,9 @@ CLOSE_PREDICTED_LSTM: str = "ClosePredictedLSTM"
 
 # Constants
 NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
+N_ESTIMATORS: int = 100
+RANDOM_STATE: int = 42
+LEARNING_RATE: float = 0.1
 
 
 # Helper methods
@@ -244,8 +247,8 @@ def main():
         test_seq, test_label = create_lstm_sequence(dataset=test_data, time_step=60)
 
         # Train the models
-        random_forest = RandomForestRegressor(n_estimators=100, random_state=42)
-        xgb_regressor = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
+        random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
+        xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
         lstm_model = Sequential()
         lstm_model.add(Input(shape=(train_seq.shape[1], train_seq.shape[2])))
         lstm_model.add(LSTM(units=60, return_sequences=True))
