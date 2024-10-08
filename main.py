@@ -8,7 +8,7 @@ import numpy
 import pandas
 import yfinance as yf
 from keras import Sequential, Input
-from keras.src.layers import LSTM, Dense
+from keras.src.layers import LSTM, Dense, Dropout
 from numpy import ndarray
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
@@ -88,6 +88,7 @@ LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 60
 EPOCHS: int = 10
+DROPOUT: float = 0.2
 
 
 # Helper methods
@@ -244,7 +245,9 @@ def main():
         lstm_model = Sequential()
         lstm_model.add(Input(shape=(train_seq.shape[1], train_seq.shape[2])))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
+        lstm_model.add(Dropout(rate=DROPOUT))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
+        lstm_model.add(Dropout(rate=DROPOUT))
         lstm_model.add(Dense(units=1))
         lstm_model.compile(loss="mean_squared_error", optimizer="adam", metrics=["mean_absolute_error"])
         lstm_model.summary()
