@@ -87,7 +87,7 @@ RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 60
-EPOCHS: int = 10
+EPOCHS: int = 100
 DROPOUT: float = 0.2
 
 
