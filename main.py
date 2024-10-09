@@ -236,14 +236,14 @@ def main():
         training_size = int(len(scaled_features) * TRAIN_SIZE)
         train_data = scaled_features[:training_size]
         test_data = scaled_features[training_size:]
-        train_seq, train_label = create_lstm_sequence(dataset=train_data, time_step=LSTM_TIME_UNITS)
-        test_seq, test_label = create_lstm_sequence(dataset=test_data, time_step=LSTM_TIME_UNITS)
+        train_sequences, train_targets = create_lstm_sequence(dataset=train_data, time_step=LSTM_TIME_UNITS)
+        test_sequences, test_targets = create_lstm_sequence(dataset=test_data, time_step=LSTM_TIME_UNITS)
 
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
         xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
         lstm_model = Sequential()
-        lstm_model.add(Input(shape=(train_seq.shape[1], train_seq.shape[2])))
+        lstm_model.add(Input(shape=(train_sequences.shape[1], train_sequences.shape[2])))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
         lstm_model.add(Dropout(rate=DROPOUT))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
@@ -254,12 +254,12 @@ def main():
 
         random_forest.fit(X=train_features, y=train_target.ravel())
         xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(x=train_seq, y=train_label, epochs=EPOCHS, validation_data=(test_seq, test_label))
+        lstm_model.fit(x=train_sequences, y=train_targets, epochs=EPOCHS, validation_data=(test_sequences, test_targets))
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
         xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_seq).reshape(-1, 1))
+        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_sequences).reshape(-1, 1))
 
         # Assigning the predicted data to the original one to compare it
         stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
