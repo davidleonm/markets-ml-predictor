@@ -220,9 +220,8 @@ def main():
         logger.info(msg="Simulating prediction for the last year...")
 
         # Create dataframe skipping the last year to let the ML model predict it
-        stock_data_until_minus_days: DataFrame = stock_data.iloc[:-NUMBER_OF_PREDICTIONS_TO_COMPARE]
-        features: DataFrame = stock_data_until_minus_days[COLUMNS_FEATURES]
-        target: DataFrame = stock_data_until_minus_days[COLUMN_CLOSE]
+        features: DataFrame = stock_data[COLUMNS_FEATURES]
+        target: DataFrame = stock_data[COLUMN_CLOSE]
 
         # Scaler as ML languages work better using lower values
         scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
