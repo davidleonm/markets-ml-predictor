@@ -81,7 +81,7 @@ CLOSE_PREDICTED_RF_XGB: str = "ClosePredicted_RF_XGB"
 CLOSE_PREDICTED_LSTM: str = "ClosePredicted_LSTM"
 
 # Constants
-NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
+NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 1000
 N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
@@ -219,7 +219,7 @@ def main():
         ## Simulate prediction for the last year
         logger.info(msg="Simulating prediction for the last year...")
 
-        # Create dataframe skipping the last year to let the ML model predict it
+        # Create dataframe to let the ML model predict it
         features: DataFrame = stock_data[COLUMNS_FEATURES]
         target: DataFrame = stock_data[COLUMN_CLOSE]
 
