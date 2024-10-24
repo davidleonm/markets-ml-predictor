@@ -219,14 +219,10 @@ def main():
         ## Simulate prediction
         logger.info(msg="Simulating prediction")
 
-        # Create dataframe to let the ML model predict it
-        features: DataFrame = stock_data[COLUMNS_FEATURES]
-        target: DataFrame = stock_data[COLUMN_CLOSE]
-
         # Scaler as ML languages work better using lower values
         scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_features = scaler.fit_transform(X=features)
-        scaled_target = scaler.fit_transform(X=target.values.reshape(-1, 1))
+        scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
+        scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
 
         # Split data into training and testing
         train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
