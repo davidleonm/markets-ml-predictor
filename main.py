@@ -81,12 +81,12 @@ CLOSE_PREDICTED_RF_XGB: str = "ClosePredicted_RF_XGB"
 CLOSE_PREDICTED_LSTM: str = "ClosePredicted_LSTM"
 
 # Constants
-NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 1000
+NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
 N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
-LSTM_TIME_UNITS: int = 60
+LSTM_TIME_UNITS: int = 90
 EPOCHS: int = 100
 DROPOUT: float = 0.2
 
@@ -216,8 +216,8 @@ def main():
         ## Print data info
         stock_data.info()
 
-        ## Simulate prediction for the last year
-        logger.info(msg="Simulating prediction for the last year...")
+        ## Simulate prediction
+        logger.info(msg="Simulating prediction")
 
         # Create dataframe to let the ML model predict it
         features: DataFrame = stock_data[COLUMNS_FEATURES]
@@ -261,9 +261,9 @@ def main():
         lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_sequences).reshape(-1, 1))
 
         # Assigning the predicted data to the original one to compare it
-        stock_data_last_year = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
-        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
-        stock_data.loc[stock_data_last_year.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
+        stock_data_to_date = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
+        stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
+        stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
