@@ -87,7 +87,7 @@ RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 90
-EPOCHS: int = 100
+EPOCHS: int = 3
 DROPOUT: float = 0.2
 FUTURE_DAYS: int = 90
 
@@ -219,7 +219,10 @@ def main():
         train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
                                                                                      train_size=TRAIN_SIZE,
                                                                                      shuffle=False)
-        generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features, targets=scaled_target, length=LSTM_TIME_UNITS, batch_size=32)
+        generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
+                                                             targets=scaled_target,
+                                                             length=scaled_features.shape[1],
+                                                             batch_size=1)
 
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
