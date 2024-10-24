@@ -9,7 +9,7 @@ import pandas
 import yfinance as yf
 from keras import Sequential, Input
 from keras.src.layers import LSTM, Dense, Dropout
-from numpy import ndarray
+from keras.src.legacy.preprocessing.sequence import TimeseriesGenerator
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -89,6 +89,7 @@ TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 90
 EPOCHS: int = 100
 DROPOUT: float = 0.2
+FUTURE_DAYS: int = 90
 
 
 # Helper methods
@@ -120,16 +121,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def create_lstm_sequence(dataset: ndarray, time_step: int) -> tuple:
-    sequences, labels = [], []
-
-    for i in range(len(dataset) - time_step):
-        sequences.append(dataset[i:i + time_step])
-        labels.append(dataset[i + time_step])
-
-    return numpy.array(sequences), numpy.array(labels)
 
 
 # Methods to add indicators and moving averages
@@ -228,17 +219,14 @@ def main():
         train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
                                                                                      train_size=TRAIN_SIZE,
                                                                                      shuffle=False)
-        training_size = int(len(scaled_features) * TRAIN_SIZE)
-        train_data = scaled_features[:training_size]
-        test_data = scaled_features[training_size:]
-        train_sequences, train_targets = create_lstm_sequence(dataset=train_data, time_step=LSTM_TIME_UNITS)
-        test_sequences, test_targets = create_lstm_sequence(dataset=test_data, time_step=LSTM_TIME_UNITS)
+        generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features, targets=scaled_target, length=LSTM_TIME_UNITS, batch_size=32)
 
         # Train the models
         random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
         xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
+
         lstm_model = Sequential()
-        lstm_model.add(Input(shape=(train_sequences.shape[1], train_sequences.shape[2])))
+        lstm_model.add(Input(shape=(LSTM_TIME_UNITS, scaled_features.shape[1])))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
         lstm_model.add(Dropout(rate=DROPOUT))
         lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
@@ -249,12 +237,12 @@ def main():
 
         random_forest.fit(X=train_features, y=train_target.ravel())
         xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(x=train_sequences, y=train_targets, epochs=EPOCHS, validation_data=(test_sequences, test_targets))
+        lstm_model.fit(generator, epochs=EPOCHS)
 
         # Predict the values and reverse the scaling
         rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
         xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(test_sequences).reshape(-1, 1))
+        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(x=generator).reshape(-1, 1))
 
         # Assigning the predicted data to the original one to compare it
         stock_data_to_date = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
