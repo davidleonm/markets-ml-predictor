@@ -8,7 +8,7 @@ import numpy
 import pandas
 import yfinance as yf
 from keras import Sequential, Input
-from keras.src.layers import LSTM, Dense, Dropout
+from keras.src.layers import LSTM, Dense
 from keras.src.legacy.preprocessing.sequence import TimeseriesGenerator
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
@@ -89,6 +89,10 @@ TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 90
 EPOCHS: int = 3
 DROPOUT: float = 0.2
+UNITS_1: int = 100
+UNITS_2: int = 50
+UNITS_3: int = 10
+DENSE_UNITS: int = 1
 FUTURE_DAYS: int = 90
 
 
@@ -230,11 +234,10 @@ def main():
 
         lstm_model = Sequential()
         lstm_model.add(Input(shape=(LSTM_TIME_UNITS, scaled_features.shape[1])))
-        lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=True))
-        lstm_model.add(Dropout(rate=DROPOUT))
-        lstm_model.add(LSTM(units=LSTM_TIME_UNITS, return_sequences=False))
-        lstm_model.add(Dropout(rate=DROPOUT))
-        lstm_model.add(Dense(units=1))
+        lstm_model.add(LSTM(units=UNITS_1, activation="relu", return_sequences=True))
+        lstm_model.add(LSTM(units=UNITS_2, activation="relu", return_sequences=True))
+        lstm_model.add(LSTM(units=UNITS_3, activation="relu", return_sequences=False))
+        lstm_model.add(Dense(units=DENSE_UNITS))
         lstm_model.compile(loss="mean_squared_error", optimizer="adam", metrics=["mean_absolute_error"])
         lstm_model.summary()
 
