@@ -255,6 +255,30 @@ def main():
         stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
         stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
 
+        # Preparar los datos de entrada para la predicción futura
+        future_predictions = []
+        current_batch = scaled_features[-LSTM_TIME_UNITS:].reshape((1, LSTM_TIME_UNITS, scaled_features.shape[1]))
+
+        for _ in range(FUTURE_DAYS):
+            # Predecir el siguiente valor
+            pred = lstm_model.predict(current_batch)[0]
+
+            # Almacenar la predicción
+            future_predictions.append(pred)
+
+            # Actualizar el batch actual para incluir la nueva predicción
+            # Aquí, en lugar de usar la predicción actual, usamos los datos históricos
+            current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-LSTM_TIME_UNITS + 1 + _].reshape((1, 1, scaled_features.shape[1])),
+                                         axis=1)
+
+        # Revertir la escala de las predicciones futuras
+        future_predictions = scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1))
+
+        # Asignar las predicciones futuras a un DataFrame para su visualización
+        future_dates = pandas.date_range(start=stock_data.index[-1], periods=FUTURE_DAYS, freq="B")
+        future_df = pandas.DataFrame(data=future_predictions, index=future_dates, columns=[CLOSE_PREDICTED_LSTM])
+        stock_data = pandas.concat([stock_data, future_df], axis=0)
+
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
         more_plots = [
