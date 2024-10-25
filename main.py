@@ -81,19 +81,17 @@ CLOSE_PREDICTED_RF_XGB: str = "ClosePredicted_RF_XGB"
 CLOSE_PREDICTED_LSTM: str = "ClosePredicted_LSTM"
 
 # Constants
-NUMBER_OF_PREDICTIONS_TO_COMPARE: int = 365
 N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
 LSTM_TIME_UNITS: int = 90
-EPOCHS: int = 3
+EPOCHS: int = 1
 DROPOUT: float = 0.2
 UNITS_1: int = 100
 UNITS_2: int = 50
 UNITS_3: int = 10
 DENSE_UNITS: int = 1
-FUTURE_DAYS: int = 90
 
 
 # Helper methods
@@ -118,10 +116,44 @@ def get_logger(name: str) -> logging.Logger:
     return custom_logger
 
 
+def check_simulation_days(value):
+    inf_limit: int = 90
+    sup_limit: int = 2000
+    result = int(value)
+
+    if result < inf_limit or result > sup_limit:
+        raise argparse.ArgumentTypeError(f"simulation_days must be between {inf_limit} and {sup_limit}, got {result}")
+
+    return result
+
+
+def check_future_days(value):
+    inf_limit: int = 7
+    sup_limit: int = 365
+    result = int(value)
+
+    if result < inf_limit or result > sup_limit:
+        raise argparse.ArgumentTypeError(f"future_days must be between {inf_limit} and {sup_limit}, got {result}")
+
+    return result
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ML stock market price predictor")
     parser.add_argument(
-        "--ticker", help="Ticker or stock symbol taken from https://finance.yahoo.com", type=str, required=True
+        "--ticker", help="Ticker or stock symbol taken from https://finance.yahoo.com",
+        type=str,
+        required=True
+    )
+    parser.add_argument(
+        "--simulation_days", help="If a simulation of a prediction for those days must be done",
+        type=check_simulation_days,
+        required=False
+    )
+    parser.add_argument(
+        "--future_days", help="If a future prediction for those days must be done",
+        type=check_future_days,
+        required=False
     )
 
     return parser.parse_args()
@@ -180,12 +212,99 @@ def enrich_data(stock_data: DataFrame) -> None:
         signal_period=MACD_SIGNAL_PERIOD,
     )
     set_triple_cross(stock_data=stock_data, threshold=TRIPLE_CROSS_THRESHOLD)
+    stock_data.dropna(subset=[COLUMN_EMA200, COLUMN_RSI], inplace=True)
 
 
 logger = get_logger(name=__name__)
 
 
+def get_lstm_model(input_shape: tuple) -> Sequential:
+    model = Sequential()
+    model.add(Input(shape=input_shape))
+    model.add(LSTM(units=UNITS_1, activation="relu", return_sequences=True))
+    model.add(LSTM(units=UNITS_2, activation="relu", return_sequences=True))
+    model.add(LSTM(units=UNITS_3, activation="relu", return_sequences=False))
+    model.add(Dense(units=DENSE_UNITS))
+    model.compile(loss="mean_squared_error", optimizer="adam", metrics=["mean_absolute_error"])
+    model.summary()
+
+    return model
+
+
 # Main method
+def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
+    logger.info(msg="Simulating prediction")
+
+    # Scaler as ML languages work better using lower values
+    scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
+    scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+
+    # Split data into training and testing
+    train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
+                                                                                 train_size=TRAIN_SIZE,
+                                                                                 shuffle=False)
+    # Create a generator for the LSTM model
+    generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
+                                                         targets=scaled_target,
+                                                         length=scaled_features.shape[1],
+                                                         batch_size=1)
+
+    # Train the models
+    random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
+    xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
+    lstm_model = get_lstm_model(input_shape=(LSTM_TIME_UNITS, scaled_features.shape[1]))
+
+    random_forest.fit(X=train_features, y=train_target.ravel())
+    xgb_regressor.fit(X=train_features, y=train_target.ravel())
+    lstm_model.fit(generator, epochs=EPOCHS)
+
+    # Predict the values and reverse the scaling
+    rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-num_days:]).reshape(-1, 1))
+    xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-num_days:]).reshape(-1, 1))
+    lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(x=generator).reshape(-1, 1))
+
+    # Assigning the predicted data to the original one to compare it
+    stock_data_to_date = stock_data.iloc[-num_days:]
+    stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
+    stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-num_days:]
+
+
+def get_future_predictions(stock_data: DataFrame, num_days: int) -> DataFrame:
+    # Calculate future prediction
+    logger.info(msg="Predicting future values to make you rich $$$ :)")
+
+    # Scaler as ML languages work better using lower values
+    scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
+    scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+
+    # Create a generator for the LSTM model
+    generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
+                                                         targets=scaled_target,
+                                                         length=scaled_features.shape[1],
+                                                         batch_size=1)
+
+    # Train the LSTM model
+    lstm_model = get_lstm_model(input_shape=(LSTM_TIME_UNITS, scaled_features.shape[1]))
+    lstm_model.fit(generator, epochs=EPOCHS)
+
+    # Prepare data for future predictions
+    future_predictions = []
+    current_batch = scaled_features[-LSTM_TIME_UNITS:].reshape((1, LSTM_TIME_UNITS, scaled_features.shape[1]))
+    for _ in range(num_days):
+        pred = lstm_model.predict(current_batch)[0]
+        future_predictions.append(pred)
+        current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-LSTM_TIME_UNITS + 1 + _].reshape((1, 1, scaled_features.shape[1])),
+                                     axis=1)
+
+    # Assigning the predicted data to the original one to review it
+    future_dates = pandas.date_range(start=stock_data.index[-1], periods=num_days, freq="B")
+    return pandas.DataFrame(data=scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1)),
+                            index=future_dates,
+                            columns=[CLOSE_PREDICTED_LSTM])
+
+
 def main():
     args = parse_arguments()
 
@@ -206,78 +325,20 @@ def main():
         ## Enrich data with moving averages and indicators
         logger.info(msg="Enriching data...")
         enrich_data(stock_data=stock_data)
-        stock_data.dropna(subset=[COLUMN_EMA200, COLUMN_RSI], inplace=True)
 
         ## Print data info
         stock_data.info()
 
-        ## Simulate prediction
-        logger.info(msg="Simulating prediction")
+        # Simulation of a prediction for the last X days to check the algorithm
+        if args.simulation_days is not None:
+            simulate_prediction(stock_data=stock_data, num_days=args.simulation_days)
 
-        # Scaler as ML languages work better using lower values
-        scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
-        scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
-        scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+        # Future prediction for the next X days to make you rich $$$
+        if args.future_days is not None:
+            future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days)
+            stock_data = pandas.concat([stock_data, future_predictions], axis=1)
 
-        # Split data into training and testing
-        train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
-                                                                                     train_size=TRAIN_SIZE,
-                                                                                     shuffle=False)
-        generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
-                                                             targets=scaled_target,
-                                                             length=scaled_features.shape[1],
-                                                             batch_size=1)
-
-        # Train the models
-        random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
-        xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
-
-        lstm_model = Sequential()
-        lstm_model.add(Input(shape=(LSTM_TIME_UNITS, scaled_features.shape[1])))
-        lstm_model.add(LSTM(units=UNITS_1, activation="relu", return_sequences=True))
-        lstm_model.add(LSTM(units=UNITS_2, activation="relu", return_sequences=True))
-        lstm_model.add(LSTM(units=UNITS_3, activation="relu", return_sequences=False))
-        lstm_model.add(Dense(units=DENSE_UNITS))
-        lstm_model.compile(loss="mean_squared_error", optimizer="adam", metrics=["mean_absolute_error"])
-        lstm_model.summary()
-
-        random_forest.fit(X=train_features, y=train_target.ravel())
-        xgb_regressor.fit(X=train_features, y=train_target.ravel())
-        lstm_model.fit(generator, epochs=EPOCHS)
-
-        # Predict the values and reverse the scaling
-        rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]).reshape(-1, 1))
-        lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(x=generator).reshape(-1, 1))
-
-        # Assigning the predicted data to the original one to compare it
-        stock_data_to_date = stock_data.iloc[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
-        stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
-        stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-NUMBER_OF_PREDICTIONS_TO_COMPARE:]
-
-        # Preparar los datos de entrada para la predicción futura
-        future_predictions = []
-        current_batch = scaled_features[-LSTM_TIME_UNITS:].reshape((1, LSTM_TIME_UNITS, scaled_features.shape[1]))
-
-        for _ in range(FUTURE_DAYS):
-            # Predecir el siguiente valor
-            pred = lstm_model.predict(current_batch)[0]
-
-            # Almacenar la predicción
-            future_predictions.append(pred)
-
-            # Actualizar el batch actual para incluir la nueva predicción
-            # Aquí, en lugar de usar la predicción actual, usamos los datos históricos
-            current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-LSTM_TIME_UNITS + 1 + _].reshape((1, 1, scaled_features.shape[1])),
-                                         axis=1)
-
-        # Revertir la escala de las predicciones futuras
-        future_predictions = scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1))
-
-        # Asignar las predicciones futuras a un DataFrame para su visualización
-        future_dates = pandas.date_range(start=stock_data.index[-1], periods=FUTURE_DAYS, freq="B")
-        future_df = pandas.DataFrame(data=future_predictions, index=future_dates, columns=[CLOSE_PREDICTED_LSTM])
-        stock_data = pandas.concat([stock_data, future_df], axis=0)
+            # TODO enrich_data(stock_data=stock_data)
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
@@ -320,18 +381,6 @@ def main():
                 markersize=TRIPLE_CROSS_MARKER_SIZE,
                 marker="v",
                 color=TRIPLE_CROSS_MARKER_COLOR,
-            ),
-            mpf.make_addplot(
-                data=stock_data[CLOSE_PREDICTED_RF_XGB],
-                color=CLOSE_RF_XGB_COLOR,
-                width=CLOSE_RF_XGB_LINE_WIDTH,
-                label=CLOSE_PREDICTED_RF_XGB,
-            ),
-            mpf.make_addplot(
-                data=stock_data[CLOSE_PREDICTED_LSTM],
-                color=CLOSE_LSTM_COLOR,
-                width=CLOSE_LSTM_LINE_WIDTH,
-                label=CLOSE_PREDICTED_LSTM,
             ),
             mpf.make_addplot(
                 data=stock_data[COLUMN_RSI],
@@ -377,6 +426,36 @@ def main():
                 alpha=0.5,
             ),
         ]
+
+        # Add plots for predictions simulation and future predictions
+        if args.simulation_days is not None:
+            more_plots.append(
+                mpf.make_addplot(
+                    data=stock_data[CLOSE_PREDICTED_RF_XGB],
+                    color=CLOSE_RF_XGB_COLOR,
+                    width=CLOSE_RF_XGB_LINE_WIDTH,
+                    ylabel=CLOSE_PREDICTED_RF_XGB,
+                ),
+            )
+            more_plots.append(
+                mpf.make_addplot(
+                    data=stock_data[CLOSE_PREDICTED_LSTM],
+                    color=CLOSE_LSTM_COLOR,
+                    width=CLOSE_LSTM_LINE_WIDTH,
+                    ylabel=CLOSE_PREDICTED_LSTM,
+                ),
+            )
+
+        if args.simulation_days is None and args.future_days is not None:
+            more_plots.append(
+                mpf.make_addplot(
+                    data=stock_data[CLOSE_PREDICTED_LSTM],
+                    color=CLOSE_LSTM_COLOR,
+                    width=CLOSE_LSTM_LINE_WIDTH,
+                    ylabel=CLOSE_PREDICTED_LSTM,
+                ),
+            )
+
         mpf.plot(
             data=stock_data,
             type="candle",
