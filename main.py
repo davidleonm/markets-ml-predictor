@@ -85,7 +85,6 @@ N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
-LSTM_TIME_UNITS: int = 90
 EPOCHS: int = 1
 DROPOUT: float = 0.2
 UNITS_1: int = 100
@@ -231,29 +230,43 @@ def get_lstm_model(input_shape: tuple) -> Sequential:
     return model
 
 
+def get_scaler_and_scaled_values(stock_data: DataFrame) -> tuple[MinMaxScaler, DataFrame, DataFrame]:
+    # Scaler as ML languages work better using lower values
+    scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
+    scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+
+    return scaler, scaled_features, scaled_target
+
+
+def get_generator(num_days: int, scaled_features: DataFrame, scaled_target: DataFrame) -> TimeseriesGenerator:
+    # Create a generator for the LSTM model
+    return TimeseriesGenerator(data=scaled_features,
+                               targets=scaled_target,
+                               length=num_days,
+                               batch_size=1)
+
+
 # Main method
 def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
     logger.info(msg="Simulating prediction")
 
     # Scaler as ML languages work better using lower values
-    scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
-    scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+    scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
 
     # Split data into training and testing
     train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
                                                                                  train_size=TRAIN_SIZE,
                                                                                  shuffle=False)
     # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
-                                                         targets=scaled_target,
-                                                         length=scaled_features.shape[1],
-                                                         batch_size=1)
+    generator: TimeseriesGenerator = get_generator(num_days=num_days,
+                                                   scaled_features=scaled_features,
+                                                   scaled_target=scaled_target)
 
     # Train the models
     random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
     xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
-    lstm_model = get_lstm_model(input_shape=(LSTM_TIME_UNITS, scaled_features.shape[1]))
+    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
 
     random_forest.fit(X=train_features, y=train_target.ravel())
     xgb_regressor.fit(X=train_features, y=train_target.ravel())
@@ -275,27 +288,24 @@ def get_future_predictions(stock_data: DataFrame, num_days: int) -> DataFrame:
     logger.info(msg="Predicting future values to make you rich $$$ :)")
 
     # Scaler as ML languages work better using lower values
-    scaler: MinMaxScaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_features = scaler.fit_transform(X=stock_data[COLUMNS_FEATURES])
-    scaled_target = scaler.fit_transform(X=stock_data[COLUMN_CLOSE].values.reshape(-1, 1))
+    scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
 
     # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
-                                                         targets=scaled_target,
-                                                         length=scaled_features.shape[1],
-                                                         batch_size=1)
+    generator: TimeseriesGenerator = get_generator(num_days=num_days,
+                                                   scaled_features=scaled_features,
+                                                   scaled_target=scaled_target)
 
     # Train the LSTM model
-    lstm_model = get_lstm_model(input_shape=(LSTM_TIME_UNITS, scaled_features.shape[1]))
+    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
     lstm_model.fit(generator, epochs=EPOCHS)
 
     # Prepare data for future predictions
     future_predictions = []
-    current_batch = scaled_features[-LSTM_TIME_UNITS:].reshape((1, LSTM_TIME_UNITS, scaled_features.shape[1]))
+    current_batch = scaled_features[-num_days:].reshape((1, num_days, scaled_features.shape[1]))
     for _ in range(num_days):
         pred = lstm_model.predict(current_batch)[0]
         future_predictions.append(pred)
-        current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-LSTM_TIME_UNITS + 1 + _].reshape((1, 1, scaled_features.shape[1])),
+        current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-num_days + 1 + _].reshape((1, 1, scaled_features.shape[1])),
                                      axis=1)
 
     # Assigning the predicted data to the original one to review it
@@ -337,8 +347,6 @@ def main():
         if args.future_days is not None:
             future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days)
             stock_data = pandas.concat([stock_data, future_predictions], axis=1)
-
-            # TODO enrich_data(stock_data=stock_data)
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
