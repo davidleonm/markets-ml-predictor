@@ -115,24 +115,13 @@ def get_logger(name: str) -> logging.Logger:
     return custom_logger
 
 
-def check_simulation_days(value):
-    inf_limit: int = 90
-    sup_limit: int = 2000
-    result = int(value)
-
-    if result < inf_limit or result > sup_limit:
-        raise argparse.ArgumentTypeError(f"simulation_days must be between {inf_limit} and {sup_limit}, got {result}")
-
-    return result
-
-
-def check_future_days(value):
-    inf_limit: int = 7
+def check_prediction_days(value):
+    inf_limit: int = 30
     sup_limit: int = 365
     result = int(value)
 
     if result < inf_limit or result > sup_limit:
-        raise argparse.ArgumentTypeError(f"future_days must be between {inf_limit} and {sup_limit}, got {result}")
+        raise argparse.ArgumentTypeError(f"prediction_days must be between {inf_limit} and {sup_limit}, got {result}")
 
     return result
 
@@ -156,16 +145,10 @@ def parse_arguments() -> argparse.Namespace:
         required=True
     )
     parser.add_argument(
-        "--simulation_days", help="If a simulation of a prediction for those days must be done",
-        type=check_simulation_days,
+        "--prediction_days", help="If a simulation of a prediction for the past/future for those days must be done",
+        type=check_prediction_days,
         required=False
     )
-    parser.add_argument(
-        "--future_days", help="If a future prediction for those days must be done",
-        type=check_future_days,
-        required=False
-    )
-
     parser.add_argument(
         "--epochs", help="Number of EPOCHS for the LSTM model",
         type=check_epoch_days,
@@ -257,78 +240,7 @@ def get_scaler_and_scaled_values(stock_data: DataFrame) -> tuple[MinMaxScaler, D
     return scaler, scaled_features, scaled_target
 
 
-def get_generator(num_days: int, scaled_features: DataFrame, scaled_target: DataFrame) -> TimeseriesGenerator:
-    # Create a generator for the LSTM model
-    return TimeseriesGenerator(data=scaled_features,
-                               targets=scaled_target,
-                               length=num_days,
-                               batch_size=1)
-
-
 # Main method
-def simulate_prediction(stock_data: DataFrame, num_days: int, epochs: int) -> None:
-    logger.info(msg="Simulating prediction")
-
-    # Scaler as ML languages work better using lower values
-    scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
-
-    # Split data into training and testing
-    train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
-                                                                                 train_size=TRAIN_SIZE,
-                                                                                 shuffle=False)
-    # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = get_generator(num_days=num_days, scaled_features=scaled_features, scaled_target=scaled_target)
-
-    # Train the models
-    random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
-    xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
-    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
-
-    random_forest.fit(X=train_features, y=train_target.ravel())
-    xgb_regressor.fit(X=train_features, y=train_target.ravel())
-    lstm_model.fit(generator, epochs=epochs)
-
-    # Predict the values and reverse the scaling
-    rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-num_days:]).reshape(-1, 1))
-    xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-num_days:]).reshape(-1, 1))
-    lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(x=generator).reshape(-1, 1))
-
-    # Assigning the predicted data to the original one to compare it
-    stock_data_to_date = stock_data.iloc[-num_days:]
-    stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
-    stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-num_days:]
-
-
-def get_future_predictions(stock_data: DataFrame, num_days: int, epochs: int) -> DataFrame:
-    # Calculate future prediction
-    logger.info(msg="Predicting future values to make you rich $$$ :)")
-
-    # Scaler as ML languages work better using lower values
-    scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
-
-    # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = get_generator(num_days=num_days, scaled_features=scaled_features, scaled_target=scaled_target)
-
-    # Train the LSTM model
-    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
-    lstm_model.fit(generator, epochs=epochs)
-
-    # Prepare data for future predictions
-    future_predictions = []
-    current_batch = scaled_features[-num_days:].reshape((1, num_days, scaled_features.shape[1]))
-    for _ in range(num_days):
-        pred = lstm_model.predict(current_batch)[0]
-        future_predictions.append(pred)
-        current_batch = numpy.append(current_batch[:, 1:, :], scaled_features[-num_days + 1 + _].reshape((1, 1, scaled_features.shape[1])),
-                                     axis=1)
-
-    # Assigning the predicted data to the original one to review it
-    future_dates = pandas.date_range(start=stock_data.index[-1], periods=num_days, freq="B")
-    return pandas.DataFrame(data=scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1)),
-                            index=future_dates,
-                            columns=[CLOSE_PREDICTED_LSTM])
-
-
 def main():
     args = parse_arguments()
 
@@ -354,13 +266,56 @@ def main():
         stock_data.info()
 
         # Simulation of a prediction for the last X days to check the algorithm
-        if args.simulation_days is not None:
-            simulate_prediction(stock_data=stock_data, num_days=args.simulation_days, epochs=args.epochs)
+        if args.prediction_days is not None:
+            logger.info(msg="Simulating prediction")
 
-        # Future prediction for the next X days to make you rich $$$
-        if args.future_days is not None:
-            future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days, epochs=args.epochs)
-            stock_data = pandas.concat([stock_data, future_predictions], axis=0)
+            # Scaler as ML languages work better using lower values
+            scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
+
+            # Split data into training and testing
+            train_features, test_features, train_target, test_targets = train_test_split(scaled_features, scaled_target,
+                                                                                         train_size=TRAIN_SIZE,
+                                                                                         shuffle=False)
+            # Create a generator for the LSTM model
+            generator: TimeseriesGenerator = TimeseriesGenerator(data=scaled_features,
+                                                                 targets=scaled_target,
+                                                                 length=args.prediction_days,
+                                                                 batch_size=1)
+
+            # Train the models
+            random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
+            xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
+            lstm_model = get_lstm_model(input_shape=(args.prediction_days, scaled_features.shape[1]))
+
+            random_forest.fit(X=train_features, y=train_target.ravel())
+            xgb_regressor.fit(X=train_features, y=train_target.ravel())
+            lstm_model.fit(generator, epochs=args.epochs)
+
+            # Predict the values and reverse the scaling
+            rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-args.prediction_days:]).reshape(-1, 1))
+            xgb_predictions = scaler.inverse_transform(X=xgb_regressor.predict(test_features[-args.prediction_days:]).reshape(-1, 1))
+            lstm_predictions = scaler.inverse_transform(X=lstm_model.predict(x=generator).reshape(-1, 1))
+
+            # Assigning the predicted data to the original one to compare it
+            stock_data_to_date = stock_data.iloc[-args.prediction_days:]
+            stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_RF_XGB] = numpy.mean([rf_predictions, xgb_predictions], axis=0)
+            stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-args.prediction_days:]
+
+            # Prepare data for future predictions
+            future_predictions = []
+            current_batch = scaled_features[-args.prediction_days:].reshape((1, args.prediction_days, scaled_features.shape[1]))
+            for _ in range(args.prediction_days):
+                pred = lstm_model.predict(current_batch)[0]
+                future_predictions.append(pred)
+                current_batch = numpy.append(current_batch[:, 1:, :],
+                                             scaled_features[-args.prediction_days + 1 + _].reshape((1, 1, scaled_features.shape[1])),
+                                             axis=1)
+
+            # Assigning the predicted data to the original one to review it
+            future_dates = pandas.date_range(start=stock_data.index[-1], periods=args.prediction_days, freq="B")
+            stock_data = pandas.concat([stock_data, pandas.DataFrame(data=scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1)),
+                                                                     index=future_dates,
+                                                                     columns=[CLOSE_PREDICTED_LSTM])], axis=0)
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
