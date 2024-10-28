@@ -324,7 +324,7 @@ def main():
     ylogger.propagate = False
 
     try:
-        ## Getting data from yahoo finance
+        # Getting data from yahoo finance
         logger.info(msg=f"Downloading data for {args.ticker.upper()}...")
         stock_data: DataFrame = yf.download(tickers=args.ticker.upper(), period="max", interval="1d", progress=False)
         stock_data.drop_duplicates(inplace=True)
@@ -332,11 +332,11 @@ def main():
         if stock_data.empty:
             raise ValueError(f"No data found for {args.ticker.upper()}")
 
-        ## Enrich data with moving averages and indicators
+        # Enrich data with moving averages and indicators
         logger.info(msg="Enriching data...")
         enrich_data(stock_data=stock_data)
 
-        ## Print data info
+        # Print data info
         stock_data.info()
 
         # Simulation of a prediction for the last X days to check the algorithm
@@ -346,7 +346,7 @@ def main():
         # Future prediction for the next X days to make you rich $$$
         if args.future_days is not None:
             future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days)
-            stock_data = pandas.concat([stock_data, future_predictions], axis=1)
+            stock_data = pandas.concat([stock_data, future_predictions], axis=0)
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
