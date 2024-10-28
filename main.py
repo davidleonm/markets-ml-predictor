@@ -85,7 +85,7 @@ N_ESTIMATORS: int = 100
 RANDOM_STATE: int = 42
 LEARNING_RATE: float = 0.1
 TRAIN_SIZE: float = 0.8
-EPOCHS: int = 1
+DEFAULT_EPOCHS: int = 1
 DROPOUT: float = 0.2
 UNITS_1: int = 100
 UNITS_2: int = 50
@@ -137,6 +137,17 @@ def check_future_days(value):
     return result
 
 
+def check_epoch_days(value):
+    inf_limit: int = 1
+    sup_limit: int = 100
+    result = int(value)
+
+    if result < inf_limit or result > sup_limit:
+        raise argparse.ArgumentTypeError(f"epochs must be between {inf_limit} and {sup_limit}, got {result}")
+
+    return result
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ML stock market price predictor")
     parser.add_argument(
@@ -153,6 +164,13 @@ def parse_arguments() -> argparse.Namespace:
         "--future_days", help="If a future prediction for those days must be done",
         type=check_future_days,
         required=False
+    )
+
+    parser.add_argument(
+        "--epochs", help="Number of EPOCHS for the LSTM model",
+        type=check_epoch_days,
+        required=False,
+        default=DEFAULT_EPOCHS
     )
 
     return parser.parse_args()
@@ -248,7 +266,7 @@ def get_generator(num_days: int, scaled_features: DataFrame, scaled_target: Data
 
 
 # Main method
-def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
+def simulate_prediction(stock_data: DataFrame, num_days: int, epochs: int) -> None:
     logger.info(msg="Simulating prediction")
 
     # Scaler as ML languages work better using lower values
@@ -268,7 +286,7 @@ def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
 
     random_forest.fit(X=train_features, y=train_target.ravel())
     xgb_regressor.fit(X=train_features, y=train_target.ravel())
-    lstm_model.fit(generator, epochs=EPOCHS)
+    lstm_model.fit(generator, epochs=epochs)
 
     # Predict the values and reverse the scaling
     rf_predictions = scaler.inverse_transform(X=random_forest.predict(X=test_features[-num_days:]).reshape(-1, 1))
@@ -281,7 +299,7 @@ def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
     stock_data.loc[stock_data_to_date.index, CLOSE_PREDICTED_LSTM] = lstm_predictions[-num_days:]
 
 
-def get_future_predictions(stock_data: DataFrame, num_days: int) -> DataFrame:
+def get_future_predictions(stock_data: DataFrame, num_days: int, epochs: int) -> DataFrame:
     # Calculate future prediction
     logger.info(msg="Predicting future values to make you rich $$$ :)")
 
@@ -293,7 +311,7 @@ def get_future_predictions(stock_data: DataFrame, num_days: int) -> DataFrame:
 
     # Train the LSTM model
     lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
-    lstm_model.fit(generator, epochs=EPOCHS)
+    lstm_model.fit(generator, epochs=epochs)
 
     # Prepare data for future predictions
     future_predictions = []
@@ -337,11 +355,11 @@ def main():
 
         # Simulation of a prediction for the last X days to check the algorithm
         if args.simulation_days is not None:
-            simulate_prediction(stock_data=stock_data, num_days=args.simulation_days)
+            simulate_prediction(stock_data=stock_data, num_days=args.simulation_days, epochs=args.epochs)
 
         # Future prediction for the next X days to make you rich $$$
         if args.future_days is not None:
-            future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days)
+            future_predictions = get_future_predictions(stock_data=stock_data, num_days=args.future_days, epochs=args.epochs)
             stock_data = pandas.concat([stock_data, future_predictions], axis=0)
 
         # Configuring plot charts
