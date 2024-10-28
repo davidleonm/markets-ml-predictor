@@ -91,7 +91,6 @@ UNITS_1: int = 100
 UNITS_2: int = 50
 UNITS_3: int = 10
 DENSE_UNITS: int = 1
-LSTM_DAYS_TO_PREDICT: int = 60
 
 
 # Helper methods
@@ -240,11 +239,11 @@ def get_scaler_and_scaled_values(stock_data: DataFrame) -> tuple[MinMaxScaler, D
     return scaler, scaled_features, scaled_target
 
 
-def get_generator(scaled_features: DataFrame, scaled_target: DataFrame) -> TimeseriesGenerator:
+def get_generator(num_days: int, scaled_features: DataFrame, scaled_target: DataFrame) -> TimeseriesGenerator:
     # Create a generator for the LSTM model
     return TimeseriesGenerator(data=scaled_features,
                                targets=scaled_target,
-                               length=LSTM_DAYS_TO_PREDICT,
+                               length=num_days,
                                batch_size=1)
 
 
@@ -260,12 +259,12 @@ def simulate_prediction(stock_data: DataFrame, num_days: int) -> None:
                                                                                  train_size=TRAIN_SIZE,
                                                                                  shuffle=False)
     # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = get_generator(scaled_features=scaled_features, scaled_target=scaled_target)
+    generator: TimeseriesGenerator = get_generator(num_days=num_days, scaled_features=scaled_features, scaled_target=scaled_target)
 
     # Train the models
     random_forest = RandomForestRegressor(n_estimators=N_ESTIMATORS, random_state=RANDOM_STATE)
     xgb_regressor = XGBRegressor(n_estimators=N_ESTIMATORS, learning_rate=LEARNING_RATE, random_state=RANDOM_STATE)
-    lstm_model = get_lstm_model(input_shape=(LSTM_DAYS_TO_PREDICT, scaled_features.shape[1]))
+    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
 
     random_forest.fit(X=train_features, y=train_target.ravel())
     xgb_regressor.fit(X=train_features, y=train_target.ravel())
@@ -290,10 +289,10 @@ def get_future_predictions(stock_data: DataFrame, num_days: int) -> DataFrame:
     scaler, scaled_features, scaled_target = get_scaler_and_scaled_values(stock_data=stock_data)
 
     # Create a generator for the LSTM model
-    generator: TimeseriesGenerator = get_generator(scaled_features=scaled_features, scaled_target=scaled_target)
+    generator: TimeseriesGenerator = get_generator(num_days=num_days, scaled_features=scaled_features, scaled_target=scaled_target)
 
     # Train the LSTM model
-    lstm_model = get_lstm_model(input_shape=(LSTM_DAYS_TO_PREDICT, scaled_features.shape[1]))
+    lstm_model = get_lstm_model(input_shape=(num_days, scaled_features.shape[1]))
     lstm_model.fit(generator, epochs=EPOCHS)
 
     # Prepare data for future predictions
