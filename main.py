@@ -155,6 +155,11 @@ def parse_arguments() -> argparse.Namespace:
         required=False,
         default=DEFAULT_EPOCHS
     )
+    parser.add_argument(
+        "--load_snapshot", help="Load the previous snapshot of the data",
+        required=False,
+        action='store_true'
+    )
 
     return parser.parse_args()
 
@@ -252,21 +257,27 @@ def main():
     try:
         # Getting data from yahoo finance
         logger.info(msg=f"Downloading data for {args.ticker.upper()}...")
-        stock_data: DataFrame = yf.download(tickers=args.ticker.upper(), period="max", interval="1d", progress=False)
-        stock_data.drop_duplicates(inplace=True)
-        stock_data.dropna(inplace=True)
+
+        if args.load_snapshot:
+            stock_data: DataFrame = pandas.read_csv(filepath_or_buffer=f"{args.ticker.upper()}_predictions.csv", index_col=0, parse_dates=True)
+        else:
+            stock_data: DataFrame = yf.download(tickers=args.ticker.upper(), period="max", interval="1d", progress=False)
+            stock_data.drop_duplicates(inplace=True)
+            stock_data.dropna(inplace=True)
+
         if stock_data.empty:
             raise ValueError(f"No data found for {args.ticker.upper()}")
 
-        # Enrich data with moving averages and indicators
-        logger.info(msg="Enriching data...")
-        enrich_data(stock_data=stock_data)
+        if not args.load_snapshot:
+            # Enrich data with moving averages and indicators
+            logger.info(msg="Enriching data...")
+            enrich_data(stock_data=stock_data)
 
         # Print data info
         stock_data.info()
 
         # Simulation of a prediction for the last X days to check the algorithm
-        if args.prediction_days is not None:
+        if args.prediction_days is not None and not args.load_snapshot:
             logger.info(msg="Simulating prediction")
 
             # Scaler as ML languages work better using lower values
@@ -316,6 +327,7 @@ def main():
             stock_data = pandas.concat([stock_data, pandas.DataFrame(data=scaler.inverse_transform(numpy.array(future_predictions).reshape(-1, 1)),
                                                                      index=future_dates,
                                                                      columns=[CLOSE_PREDICTED_LSTM])], axis=0)
+            stock_data.to_csv(path_or_buf=f"{args.ticker.upper()}_predictions.csv", )
 
         # Configuring plot charts
         # https://github.com/matplotlib/mplfinance
