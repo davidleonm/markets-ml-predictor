@@ -405,7 +405,7 @@ def main():
         ]
 
         # Add plots for predictions simulation and future predictions
-        if args.simulation_days is not None:
+        if args.prediction_days is not None:
             more_plots.append(
                 mpf.make_addplot(
                     data=stock_data[CLOSE_PREDICTED_RF_XGB],
@@ -414,16 +414,6 @@ def main():
                     ylabel=CLOSE_PREDICTED_RF_XGB,
                 ),
             )
-            more_plots.append(
-                mpf.make_addplot(
-                    data=stock_data[CLOSE_PREDICTED_LSTM],
-                    color=CLOSE_LSTM_COLOR,
-                    width=CLOSE_LSTM_LINE_WIDTH,
-                    ylabel=CLOSE_PREDICTED_LSTM,
-                ),
-            )
-
-        if args.simulation_days is None and args.future_days is not None:
             more_plots.append(
                 mpf.make_addplot(
                     data=stock_data[CLOSE_PREDICTED_LSTM],
