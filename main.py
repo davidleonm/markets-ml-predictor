@@ -412,7 +412,7 @@ def main():
             title=f"Daily chart for {args.ticker.upper()}",
             xlabel="Date",
             ylabel="Price",
-            volume=False,
+            volume=True,
             warn_too_much_data=sys.maxsize,
             addplot=more_plots,
             scale_padding={"left": 0.1, "top": 0.3, "right": 0.5, "bottom": 0.75},
